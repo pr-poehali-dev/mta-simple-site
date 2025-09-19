@@ -7,37 +7,151 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import Icon from "@/components/ui/icon";
+import { useToast } from "@/hooks/use-toast";
 
-const mockPlayerData = {
-  username: "Phoenix_Walker",
-  level: 45,
-  money: 2450000,
-  experience: 75,
-  achievements: [
-    { id: 1, name: "Первый заработок", description: "Заработать первые $1000", completed: true },
-    { id: 2, name: "Опытный водитель", description: "Проехать 1000 км", completed: true },
-    { id: 3, name: "Миллионер", description: "Накопить $1,000,000", completed: true },
-    { id: 4, name: "Легенда города", description: "Достичь 50 уровня", completed: false },
-  ],
-  stats: {
-    playtime: "156 часов",
-    jobs: 234,
-    races: 45,
-    crimes: 12
-  }
-};
+
+
+const API_URL = "https://functions.poehali.dev/8173c18b-ed91-4614-89b7-d3080eb2a4c5";
+
+interface UserData {
+  id: number;
+  username: string;
+  email: string;
+}
+
+interface PlayerProfile {
+  character_name: string;
+  level: number;
+  experience: number;
+  money: number;
+  playtime_hours: number;
+  jobs_completed: number;
+  races_participated: number;
+  crimes_committed: number;
+}
+
+interface Achievement {
+  id: number;
+  name: string;
+  description: string;
+  completed: boolean;
+  progress: number;
+}
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState("home");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
+  const [registerForm, setRegisterForm] = useState({ username: "", email: "", password: "" });
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loginForm.username && loginForm.password) {
-      setIsLoggedIn(true);
-      setActiveTab("profile");
+    setIsLoading(true);
+    
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'register',
+          username: registerForm.username,
+          email: registerForm.email,
+          password: registerForm.password
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        toast({
+          title: "Успешная регистрация!",
+          description: "Аккаунт создан. Теперь вы можете войти в систему.",
+        });
+        setRegisterForm({ username: "", email: "", password: "" });
+        setActiveTab("home");
+      } else {
+        toast({
+          title: "Ошибка регистрации",
+          description: data.error || "Произошла ошибка при регистрации",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось подключиться к серверу",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'login',
+          username: loginForm.username,
+          password: loginForm.password
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setUserData(data.user);
+        setPlayerProfile(data.profile);
+        setAchievements(data.achievements);
+        setIsLoggedIn(true);
+        setActiveTab("profile");
+        toast({
+          title: "Добро пожаловать!",
+          description: `Вы вошли как ${data.user.username}`,
+        });
+      } else {
+        toast({
+          title: "Ошибка входа",
+          description: data.error || "Неверные данные для входа",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось подключиться к серверу",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setUserData(null);
+    setPlayerProfile(null);
+    setAchievements([]);
+    setLoginForm({ username: "", password: "" });
+    setActiveTab("home");
+    toast({
+      title: "Выход выполнен",
+      description: "Вы успешно вышли из системы",
+    });
   };
 
   return (
@@ -84,6 +198,15 @@ export default function Index() {
             >
               Статистика
             </button>
+            {isLoggedIn && (
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 transition-all"
+              >
+                <Icon name="LogOut" className="mr-2" size={16} />
+                Выход
+              </button>
+            )}
           </nav>
         </div>
       </header>
@@ -190,9 +313,13 @@ export default function Index() {
                         placeholder="Введите пароль"
                       />
                     </div>
-                    <Button type="submit" className="w-full bg-neon-green text-black hover:bg-neon-green/80">
+                    <Button 
+                      type="submit" 
+                      disabled={isLoading}
+                      className="w-full bg-neon-green text-black hover:bg-neon-green/80 disabled:opacity-50"
+                    >
                       <Icon name="LogIn" className="mr-2" size={16} />
-                      Войти в игру
+                      {isLoading ? "Вход..." : "Войти в игру"}
                     </Button>
                   </form>
                 </CardContent>
@@ -211,37 +338,52 @@ export default function Index() {
                   Создайте новый аккаунт для игры на сервере
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="reg-username" className="text-gray-300">Имя пользователя</Label>
-                  <Input
-                    id="reg-username"
-                    className="bg-dark border-gray-600 text-white focus:border-neon-green"
-                    placeholder="Выберите уникальное имя"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="reg-email" className="text-gray-300">Email</Label>
-                  <Input
-                    id="reg-email"
-                    type="email"
-                    className="bg-dark border-gray-600 text-white focus:border-neon-green"
-                    placeholder="Ваш email адрес"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="reg-password" className="text-gray-300">Пароль</Label>
-                  <Input
-                    id="reg-password"
-                    type="password"
-                    className="bg-dark border-gray-600 text-white focus:border-neon-green"
-                    placeholder="Придумайте надежный пароль"
-                  />
-                </div>
-                <Button className="w-full bg-neon-green text-black hover:bg-neon-green/80">
-                  <Icon name="UserPlus" className="mr-2" size={16} />
-                  Создать аккаунт
-                </Button>
+              <CardContent>
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div>
+                    <Label htmlFor="reg-username" className="text-gray-300">Имя пользователя</Label>
+                    <Input
+                      id="reg-username"
+                      value={registerForm.username}
+                      onChange={(e) => setRegisterForm({ ...registerForm, username: e.target.value })}
+                      className="bg-dark border-gray-600 text-white focus:border-neon-green"
+                      placeholder="Выберите уникальное имя"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="reg-email" className="text-gray-300">Email</Label>
+                    <Input
+                      id="reg-email"
+                      type="email"
+                      value={registerForm.email}
+                      onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
+                      className="bg-dark border-gray-600 text-white focus:border-neon-green"
+                      placeholder="Ваш email адрес"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="reg-password" className="text-gray-300">Пароль</Label>
+                    <Input
+                      id="reg-password"
+                      type="password"
+                      value={registerForm.password}
+                      onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                      className="bg-dark border-gray-600 text-white focus:border-neon-green"
+                      placeholder="Придумайте надежный пароль"
+                      required
+                    />
+                  </div>
+                  <Button 
+                    type="submit" 
+                    disabled={isLoading}
+                    className="w-full bg-neon-green text-black hover:bg-neon-green/80 disabled:opacity-50"
+                  >
+                    <Icon name="UserPlus" className="mr-2" size={16} />
+                    {isLoading ? "Создание..." : "Создать аккаунт"}
+                  </Button>
+                </form>
               </CardContent>
             </Card>
           </div>
@@ -262,27 +404,27 @@ export default function Index() {
                       <div className="w-24 h-24 bg-neon-green/20 rounded-full mx-auto mb-4 flex items-center justify-center">
                         <Icon name="User" className="text-neon-green" size={40} />
                       </div>
-                      <h3 className="text-xl font-orbitron text-white">{mockPlayerData.username}</h3>
-                      <p className="text-gray-400">Уровень {mockPlayerData.level}</p>
+                      <h3 className="text-xl font-orbitron text-white">{playerProfile?.character_name || userData?.username || "Игрок"}</h3>
+                      <p className="text-gray-400">Уровень {playerProfile?.level || 1}</p>
                     </div>
                     
                     <div className="space-y-3">
                       <div>
                         <div className="flex justify-between text-sm mb-1">
                           <span className="text-gray-300">Опыт</span>
-                          <span className="text-neon-green">{mockPlayerData.experience}%</span>
+                          <span className="text-neon-green">{playerProfile?.experience || 0}%</span>
                         </div>
-                        <Progress value={mockPlayerData.experience} className="h-2" />
+                        <Progress value={playerProfile?.experience || 0} className="h-2" />
                       </div>
                       
                       <div className="flex justify-between items-center">
                         <span className="text-gray-300">Деньги:</span>
-                        <span className="text-neon-green font-bold">${mockPlayerData.money.toLocaleString()}</span>
+                        <span className="text-neon-green font-bold">${(playerProfile?.money || 0).toLocaleString()}</span>
                       </div>
                       
                       <div className="flex justify-between items-center">
                         <span className="text-gray-300">Время в игре:</span>
-                        <span className="text-white">{mockPlayerData.stats.playtime}</span>
+                        <span className="text-white">{playerProfile?.playtime_hours || 0} часов</span>
                       </div>
                     </div>
                   </CardContent>
@@ -311,7 +453,7 @@ export default function Index() {
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <p className="text-2xl font-bold text-white">{mockPlayerData.stats.jobs}</p>
+                          <p className="text-2xl font-bold text-white">{playerProfile?.jobs_completed || 0}</p>
                           <p className="text-gray-400 text-sm">выполнено заданий</p>
                         </CardContent>
                       </Card>
@@ -324,7 +466,7 @@ export default function Index() {
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <p className="text-2xl font-bold text-white">{mockPlayerData.stats.races}</p>
+                          <p className="text-2xl font-bold text-white">{playerProfile?.races_participated || 0}</p>
                           <p className="text-gray-400 text-sm">участие в гонках</p>
                         </CardContent>
                       </Card>
@@ -337,7 +479,7 @@ export default function Index() {
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <p className="text-2xl font-bold text-white">{mockPlayerData.stats.crimes}</p>
+                          <p className="text-2xl font-bold text-white">{playerProfile?.crimes_committed || 0}</p>
                           <p className="text-gray-400 text-sm">нарушений закона</p>
                         </CardContent>
                       </Card>
@@ -359,7 +501,7 @@ export default function Index() {
                   
                   <TabsContent value="achievements" className="mt-6">
                     <div className="space-y-3">
-                      {mockPlayerData.achievements.map((achievement) => (
+                      {achievements.map((achievement) => (
                         <Card
                           key={achievement.id}
                           className={`bg-dark-card border transition-all ${
